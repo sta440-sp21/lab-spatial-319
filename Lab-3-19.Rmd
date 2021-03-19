@@ -1,0 +1,182 @@
+---
+title: "STA 440 Lab - Spatial Data Visualization"
+author: "Anna Yanchenko"
+date: "3/19/2021"
+output: pdf_document
+---
+
+Lab GitHub: https://github.com/sta440-sp21/lab-spatial-319
+
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, message=FALSE, warning = FALSE}
+library(tidyverse)
+library(sf)
+```
+
+```{r}
+## Load NC county data
+nc <- st_read("nc.shp", quiet = TRUE)
+nc
+```
+
+```{r}
+## Plot
+ggplot(nc) + 
+  geom_sf() + 
+  labs(title = "North Carolina county boundaries") +
+  theme_bw()
+```
+
+```{r}
+## read in health data
+
+nc_health <- read_csv("nc_health.csv")
+head(nc_health)
+```
+
+```{r}
+nc_health <- rename(nc_health, name = county)
+nc <- merge(nc, nc_health, by = "name")
+nc
+```
+
+
+
+# 1. Create a choropleth map for a variable of your choice
+
+- What type of variable do we need for a choropleth map?
+
+\newpage
+
+
+```{r}
+ggplot(nc) + 
+  geom_sf(aes(fill = inactive)) +
+  scale_fill_gradient(low = "#fee8c8", high = "#7f0000") +
+  labs(title = "Percentage of Adults who are Physically Inactive",
+       fill = "Percentage") +
+  theme_bw()
+```
+
+
+```{r}
+ggplot(nc) + 
+  geom_sf(aes(fill = obesity)) +
+  scale_fill_gradient(low = "#fee8c8", high = "#7f0000") +
+  labs(title = "Percentage of Adults who are Obese",
+       fill = "Percentage") +
+  theme_bw()
+```
+
+
+```{r}
+ggplot(nc) + 
+  geom_sf(aes(fill = hs)) +
+  scale_fill_gradient(low = "#fee8c8", high = "#7f0000") +
+  labs(title = "Percentage of Adults who have Graduated High School",
+       fill = "Percentage") +
+  theme_bw()
+```
+
+
+# 2. Evaluate whether there is evidence of spatial autocorrelation for obesity
+
+- What measure can we use to access spatial autocorrelation?
+- What type of neighbors do we want to consider?
+- How do we interpret the results?
+
+\newpage
+
+```{r,  message=FALSE, warning = FALSE}
+library(spdep)
+```
+
+```{r}
+## Form spatial weight matrix
+sp_wts <- poly2nb(nc, row.names=nc$name, queen = T)
+sp_wts
+summary(sp_wts)
+
+## Spatial weight matrix
+sp_mat <- nb2mat(sp_wts, style='B') # Binary 1/0
+
+## List form of spatial weight matrix
+sp_mat_list <-  nb2listw(sp_wts, style='B')
+sp_mat_list
+
+
+
+## moran(x, listw, n, S0)
+
+moran(nc$obesity, sp_mat_list, nrow(nc), sum(sp_mat))
+
+```
+
+```{r}
+sp_mat_list_std <-  nb2listw(sp_wts, style='W')
+moran.plot(nc$obesity, sp_mat_list_std,
+           xlab = "Percentage Obese",
+           ylab = "Spatially lagged percentage")
+```
+
+# 3. Create a new variable that corresponds to the average obesity in neighboring counties (i.e., the spatially-lagged obesity). In your spatial weight matrix, use a row-standardized binary matrix.
+
+
+
+\newpage
+
+```{r}
+nc$lagged_obesity <- t(nc$obesity %*% nb2mat(sp_wts, style='W'))
+```
+
+
+```{r}
+ggplot(nc) + 
+  geom_sf(aes(fill = lagged_obesity)) +
+  scale_fill_gradient(low = "#fee8c8", high = "#7f0000") +
+  labs(title = "Averge Percentage Obese of Neighbors",
+       fill = "Percentage") +
+  theme_bw()
+```
+
+
+```{r}
+ggplot(nc) + 
+  geom_sf(aes(fill = obesity)) +
+  scale_fill_gradient(low = "#fee8c8", high = "#7f0000") +
+  labs(title = "Percentage of Adults who are Obese",
+       fill = "Percentage") +
+  theme_bw()
+```
+
+
+```{r, echo = FALSE}
+## Moran's I
+#moran(nc$lagged_obesity, sp_mat_list, nrow(nc), sum(sp_mat))
+
+```
+
+# 4. Evaluate the Pearson correlation between a county's adult physical inactivity rate and the average obesity among its neighbors
+
+\newpage
+
+```{r}
+cor(nc$inactive, nc$lagged_obesity, method = 'pearson')[1,1]
+```
+
+# Challenge: Find county-level population data; modify your spatial weight matrix to account for the population of neighboring counties.
+
+
+- How might we do this?
+
+\newpage
+
+https://demography.osbm.nc.gov/explore/dataset/county-population-estimates-standard-revised/table/?disjunctive.county&disjunctive.population&sort=county&refine.year=2019
